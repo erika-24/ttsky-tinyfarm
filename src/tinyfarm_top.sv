@@ -1,115 +1,5 @@
 `timescale 1ns/1ps
 
-`default_nettype none
-
-module tt_um_erika24 (
-    input  logic [7:0] ui_in,    // dedicated inputs
-    output logic [7:0] uo_out,   // dedicated outputs
-    input  logic [7:0] uio_in,   // bidirectional input path
-    output logic [7:0] uio_out,  // bidirectional output path
-    output logic [7:0] uio_oe,   // bidirectional output enable
-    input  logic       ena,      // always high when design is powered
-    input  logic       clk,      // clock
-    input  logic       rst_n     // active-low reset
-);
-
-    // TinyFarm input mapping:
-    // ui_in[1:0] = mode select
-    //   00 = view
-    //   01 = plant
-    //   10 = water
-    //   11 = harvest
-    //
-    // ui_in[3:2] = field select
-    // ui_in[5:4] = crop select
-    //   00 = wheat
-    //   01 = corn
-    //   10 = carrot
-    //   11 = tomato
-    //
-    // ui_in[6] = action button
-    // ui_in[7] = fulfill button
-
-    logic [1:0] mode_sel;
-    logic [1:0] field_sel;
-    logic [1:0] crop_sel;
-    logic       action_btn;
-    logic       fulfill_btn;
-
-    assign mode_sel    = ui_in[1:0];
-    assign field_sel   = ui_in[3:2];
-    assign crop_sel    = ui_in[5:4];
-    assign action_btn  = ui_in[6];
-    assign fulfill_btn = ui_in[7];
-
-    // Tiny VGA PMOD signal order:
-    // uo_out[0] = R1
-    // uo_out[1] = G1
-    // uo_out[2] = B1
-    // uo_out[3] = VSYNC
-    // uo_out[4] = R0
-    // uo_out[5] = G0
-    // uo_out[6] = B0
-    // uo_out[7] = HSYNC
-
-    logic       hsync;
-    logic       vsync;
-    logic [1:0] vga_r;
-    logic [1:0] vga_g;
-    logic [1:0] vga_b;
-
-    logic [7:0]  score_unused;
-    logic [11:0] inventory_unused;
-    logic [1:0]  order_crop_unused;
-    logic [1:0]  order_qty_unused;
-    logic [3:0]  order_timer_unused;
-
-    tinyfarm_top #(
-        .CLK_HZ(25_000_000),
-        .GAME_TICK_HZ(4)
-    ) tinyfarm_inst (
-        .clk(clk),
-        .rst_n(rst_n),
-
-        .mode_sel(mode_sel),
-        .field_sel(field_sel),
-        .crop_sel(crop_sel),
-
-        .action_btn(action_btn),
-        .fulfill_btn(fulfill_btn),
-
-        .hsync(hsync),
-        .vsync(vsync),
-        .vga_r(vga_r),
-        .vga_g(vga_g),
-        .vga_b(vga_b),
-
-        .score_o(score_unused),
-        .inventory_o(inventory_unused),
-        .order_crop_o(order_crop_unused),
-        .order_qty_o(order_qty_unused),
-        .order_timer_o(order_timer_unused)
-    );
-
-    assign uo_out[0] = vga_r[1];
-    assign uo_out[1] = vga_g[1];
-    assign uo_out[2] = vga_b[1];
-    assign uo_out[3] = vsync;
-    assign uo_out[4] = vga_r[0];
-    assign uo_out[5] = vga_g[0];
-    assign uo_out[6] = vga_b[0];
-    assign uo_out[7] = hsync;
-
-    // No bidirectional pins used
-    assign uio_out = 8'b0;
-    assign uio_oe  = 8'b0;
-
-    // Avoid unused signal warnings
-    logic _unused = &{ena, uio_in, 1'b0};
-
-endmodule
-
-
 module tinyfarm_top #(
     parameter int CLK_HZ       = 25_000_000,
     parameter int GAME_TICK_HZ = 4
@@ -152,17 +42,17 @@ module tinyfarm_top #(
     localparam logic [3:0] ORDER_TIME_DEFAULT = 4'd12;
     localparam logic [2:0] INV_MAX            = 3'd7;
 
-    typedef struct packed {
-        logic       valid;
-        logic       ready;
-        logic [1:0] crop;
-        logic [3:0] timer;
-    } field_t;
+    // typedef struct packed {
+    //     logic       valid;
+    //     logic       ready;
+    //     logic [1:0] crop;
+    //     logic [3:0] timer;
+    // } field_t;
 
-    // logic field_valid [0:3];
-    // logic field_ready [0:3];
-    // logic field_crop [0:3];
-    // logic field_ready [0:3];
+    logic field_valid [0:3];
+    logic field_ready [0:3];
+    logic [1:0] field_crop [0:3];
+    logic [3:0] field_timer [0:3];
 
     typedef enum logic [1:0] {
         ST_IDLE    = 2'd0,
@@ -171,8 +61,13 @@ module tinyfarm_top #(
         ST_TICK    = 2'd3
     } state_t;
 
-    field_t fields [0:3];
+    // field_t fields [0:3];
     logic [2:0] inventory [0:3];
+
+    // logic [2:0] inv_wheat;
+    // logic [2:0] inv_corn;
+    // logic [2:0] inv_carrot;
+    // logic [2:0] inv_tomato;
 
     logic [1:0] order_crop;
     logic [1:0] order_qty;   // 1..3
@@ -258,14 +153,15 @@ module tinyfarm_top #(
              (y < y0 + t) || (y >= y0 + h - t));
     endfunction
 
-    function automatic logic [5:0] field_color(input field_t f);
+    function automatic logic [5:0] field_color(input logic valid,
+            input logic ready, input logic [1:0] crop);
         begin
-            if (!f.valid) begin
+            if (!valid) begin
                 field_color = 6'b01_00_00; // brown-ish empty soil
-            end else if (f.ready) begin
+            end else if (ready) begin
                 field_color = 6'b00_11_00; // bright green ready
             end else begin
-                case (f.crop)
+                case (crop)
                     CROP_WHEAT:  field_color = 6'b11_11_00; // yellow
                     CROP_CORN:   field_color = 6'b11_11_00; // yellow
                     CROP_CARROT: field_color = 6'b11_01_00; // orange
@@ -345,10 +241,10 @@ module tinyfarm_top #(
             state <= ST_IDLE;
 
             for (i = 0; i < 4; i = i + 1) begin
-                fields[i].valid <= 1'b0;
-                fields[i].ready <= 1'b0;
-                fields[i].crop  <= 2'd0;
-                fields[i].timer <= 4'd0;
+                field_valid[i] <= 1'b0;
+                field_ready[i] <= 1'b0;
+                field_crop[i]  <= 2'd0;
+                field_timer[i] <= 4'd0;
                 inventory[i]    <= 3'd0;
             end
 
@@ -368,34 +264,34 @@ module tinyfarm_top #(
                 ST_ACTION: begin
                     unique case (mode_sel)
                         MODE_PLANT: begin
-                            if (!fields[field_sel].valid) begin
-                                fields[field_sel].valid <= 1'b1;
-                                fields[field_sel].ready <= 1'b0;
-                                fields[field_sel].crop  <= crop_sel;
-                                fields[field_sel].timer <= crop_growth_time(crop_sel);
+                            if (!field_valid[field_sel]) begin
+                                field_valid[field_sel] <= 1'b1;
+                                field_ready[field_sel] <= 1'b0;
+                                field_crop[field_sel]  <= crop_sel;
+                                field_timer[field_sel] <= crop_growth_time(crop_sel);
                             end
                         end
 
                         MODE_WATER: begin
-                            if (fields[field_sel].valid && !fields[field_sel].ready) begin
-                                if (fields[field_sel].timer > 4'd1) begin
-                                    fields[field_sel].timer <= fields[field_sel].timer - 4'd1;
+                            if (field_valid[field_sel] && !field_ready[field_sel]) begin
+                                if (field_timer[field_sel] > 4'd1) begin
+                                    field_timer[field_sel] <= field_timer[field_sel] - 4'd1;
                                 end else begin
-                                    fields[field_sel].timer <= 4'd0;
-                                    fields[field_sel].ready <= 1'b1;
+                                    field_timer[field_sel] <= 4'd0;
+                                    field_ready[field_sel] <= 1'b1;
                                 end
                             end
                         end
 
                         MODE_HARVEST: begin
-                            if (fields[field_sel].valid && fields[field_sel].ready) begin
-                                fcrop = fields[field_sel].crop;
+                            if (field_valid[field_sel] && field_ready[field_sel]) begin
+                                fcrop = field_crop[field_sel];
                                 inventory[fcrop] <= sat_inc3(inventory[fcrop]);
 
-                                fields[field_sel].valid <= 1'b0;
-                                fields[field_sel].ready <= 1'b0;
-                                fields[field_sel].crop  <= 2'd0;
-                                fields[field_sel].timer <= 4'd0;
+                                field_valid[field_sel] <= 1'b0;
+                                field_ready[field_sel] <= 1'b0;
+                                field_crop[field_sel]  <= 2'd0;
+                                field_timer[field_sel] <= 4'd0;
                             end
                         end
 
@@ -420,12 +316,12 @@ module tinyfarm_top #(
 
                 ST_TICK: begin
                     for (i = 0; i < 4; i = i + 1) begin
-                        if (fields[i].valid && !fields[i].ready) begin
-                            if (fields[i].timer > 4'd1) begin
-                                fields[i].timer <= fields[i].timer - 4'd1;
+                        if (field_valid[i] && !field_ready[i]) begin
+                            if (field_timer[i] > 4'd1) begin
+                                field_timer[i] <= field_timer[i] - 4'd1;
                             end else begin
-                                fields[i].timer <= 4'd0;
-                                fields[i].ready <= 1'b1;
+                                field_timer[i] <= 4'd0;
+                                field_ready[i] <= 1'b1;
                             end
                         end
                     end
@@ -483,22 +379,22 @@ module tinyfarm_top #(
 
             // Four field boxes.
             if (in_rect(hcount, vcount,  10'd40,  10'd40, 10'd180, 10'd140))
-                rgb = field_color(fields[0]);
+                rgb = field_color(field_valid[0], field_ready[0], field_crop[0]);
             if (on_border(hcount, vcount, 10'd40, 10'd40, 10'd180, 10'd140, 10'd4) && (field_sel == 2'd0))
                 rgb = 6'b11_11_11;
 
             if (in_rect(hcount, vcount, 10'd240,  10'd40, 10'd180, 10'd140))
-                rgb = field_color(fields[1]);
+                rgb = field_color(field_valid[1], field_ready[1], field_crop[1]);
             if (on_border(hcount, vcount, 10'd240, 10'd40, 10'd180, 10'd140, 10'd4) && (field_sel == 2'd1))
                 rgb = 6'b11_11_11;
 
             if (in_rect(hcount, vcount, 10'd40, 10'd220, 10'd180, 10'd140))
-                rgb = field_color(fields[2]);
+                rgb = field_color(field_valid[2], field_ready[2], field_crop[2]);
             if (on_border(hcount, vcount, 10'd40, 10'd220, 10'd180, 10'd140, 10'd4) && (field_sel == 2'd2))
                 rgb = 6'b11_11_11;
 
             if (in_rect(hcount, vcount, 10'd240, 10'd220, 10'd180, 10'd140))
-                rgb = field_color(fields[3]);
+                rgb = field_color(field_valid[3], field_ready[3], field_crop[3]);
             if (on_border(hcount, vcount, 10'd240, 10'd220, 10'd180, 10'd140, 10'd4) && (field_sel == 2'd3))
                 rgb = 6'b11_11_11;
 
