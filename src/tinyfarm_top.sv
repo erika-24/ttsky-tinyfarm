@@ -1,5 +1,112 @@
 `timescale 1ns/1ps
 
+module tt_um_erika24 (
+    input  logic [7:0] ui_in,    // dedicated inputs
+    output logic [7:0] uo_out,   // dedicated outputs
+    input  logic [7:0] uio_in,   // bidirectional input path
+    output logic [7:0] uio_out,  // bidirectional output path
+    output logic [7:0] uio_oe,   // bidirectional output enable
+    input  logic       ena,      // always high when design is powered
+    input  logic       clk,      // clock
+    input  logic       rst_n     // active-low reset
+);
+
+    // TinyFarm input mapping:
+    // ui_in[1:0] = mode select
+    //   00 = view
+    //   01 = plant
+    //   10 = water
+    //   11 = harvest
+    //
+    // ui_in[3:2] = field select
+    // ui_in[5:4] = crop select
+    //   00 = wheat
+    //   01 = corn
+    //   10 = carrot
+    //   11 = tomato
+    //
+    // ui_in[6] = action button
+    // ui_in[7] = fulfill button
+
+    logic [1:0] mode_sel;
+    logic [1:0] field_sel;
+    logic [1:0] crop_sel;
+    logic       action_btn;
+    logic       fulfill_btn;
+
+    assign mode_sel    = ui_in[1:0];
+    assign field_sel   = ui_in[3:2];
+    assign crop_sel    = ui_in[5:4];
+    assign action_btn  = ui_in[6];
+    assign fulfill_btn = ui_in[7];
+
+    // Tiny VGA PMOD signal order:
+    // uo_out[0] = R1
+    // uo_out[1] = G1
+    // uo_out[2] = B1
+    // uo_out[3] = VSYNC
+    // uo_out[4] = R0
+    // uo_out[5] = G0
+    // uo_out[6] = B0
+    // uo_out[7] = HSYNC
+
+    logic       hsync;
+    logic       vsync;
+    logic [1:0] vga_r;
+    logic [1:0] vga_g;
+    logic [1:0] vga_b;
+
+    logic [7:0]  score_unused;
+    logic [11:0] inventory_unused;
+    logic [1:0]  order_crop_unused;
+    logic [1:0]  order_qty_unused;
+    logic [3:0]  order_timer_unused;
+
+    tinyfarm_top #(
+        .CLK_HZ(25_000_000),
+        .GAME_TICK_HZ(4)
+    ) tinyfarm_inst (
+        .clk(clk),
+        .rst_n(rst_n),
+
+        .mode_sel(mode_sel),
+        .field_sel(field_sel),
+        .crop_sel(crop_sel),
+
+        .action_btn(action_btn),
+        .fulfill_btn(fulfill_btn),
+
+        .hsync(hsync),
+        .vsync(vsync),
+        .vga_r(vga_r),
+        .vga_g(vga_g),
+        .vga_b(vga_b),
+
+        .score_o(score_unused),
+        .inventory_o(inventory_unused),
+        .order_crop_o(order_crop_unused),
+        .order_qty_o(order_qty_unused),
+        .order_timer_o(order_timer_unused)
+    );
+
+    assign uo_out[0] = vga_r[1];
+    assign uo_out[1] = vga_g[1];
+    assign uo_out[2] = vga_b[1];
+    assign uo_out[3] = vsync;
+    assign uo_out[4] = vga_r[0];
+    assign uo_out[5] = vga_g[0];
+    assign uo_out[6] = vga_b[0];
+    assign uo_out[7] = hsync;
+
+    // No bidirectional pins used
+    assign uio_out = 8'b0;
+    assign uio_oe  = 8'b0;
+
+    // Avoid unused signal warnings
+    logic _unused = &{ena, uio_in, 1'b0};
+
+endmodule
+
 module tinyfarm_top #(
     parameter int CLK_HZ       = 25_000_000,
     parameter int GAME_TICK_HZ = 4
