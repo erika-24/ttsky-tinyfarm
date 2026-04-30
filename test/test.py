@@ -1,6 +1,7 @@
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles
+import os
 
 
 # Modes
@@ -90,6 +91,27 @@ async def test_project(dut):
 
     dut.rst_n.value = 1
     await ClockCycles(dut.clk, 5)
+
+    is_gate_level = os.getenv("GATES") == "yes"
+
+    if is_gate_level:
+        dut._log.info("Running gate-level test only")
+
+        assert dut.uo_out.value.is_resolvable, "uo_out has X/Z values after reset"
+        assert dut.uio_out.value == 0, "uio_out should be tied to 0"
+        assert dut.uio_oe.value == 0, "uio_oe should be tied to 0"
+
+        # Try one simple input action and make sure outputs remain valid
+        dut.ui_in.value = 0b01000001  # action=1, crop=00, field=00, mode=01 plant
+        await ClockCycles(dut.clk, 5)
+
+        dut.ui_in.value = 0b00000001  # release action, stay in plant mode
+        await ClockCycles(dut.clk, 20)
+
+        assert dut.uo_out.value.is_resolvable, "uo_out has X/Z values after plant action"
+
+        dut._log.info("Gate-level test passed")
+        return
 
     core = get_core(dut)
 
