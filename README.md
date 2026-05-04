@@ -1,42 +1,43 @@
-![](../../workflows/gds/badge.svg) ![](../../workflows/docs/badge.svg) ![](../../workflows/test/badge.svg) ![](../../workflows/fpga/badge.svg)
+# Tiny Farm
 
-# Tiny Tapeout Verilog Project Template
+TinyFarm is a small hardware-based farming game implemented in SystemVerilog. The design maintains internal state for four farm fields, each of which can be 1. empty, 2. growing a crop, or 3. ready to harvest. When a crop is planted, a growth timer begins and decreases on each game tick. Once the timer reaches zero, the crop becomes ready to harvest.
 
-- [Read the documentation for project](docs/info.md)
+The system also includes an inventory and a customer order generator. The player must grow and harvest crops to fulfill orders before their timers expire. A background game clock controls crop growth and order countdown independently of user actions.
 
-## What is Tiny Tapeout?
+The design outputs a VGA signal (RGB222 format) that visually displays the farm grid, crop states, and game status. User inputs control field selection, crop selection, and actions such as planting, watering, harvesting, and fulfilling orders.
 
-Tiny Tapeout is an educational project that aims to make it easier and cheaper than ever to get your digital and analog designs manufactured on a real chip.
+## How to test
 
-To learn more and get started, visit https://tinytapeout.com.
+Use the input pins to control the game:
 
-## Set up your Verilog project
+Mode select (ui[1:0])
+- 00 = View
+- 01 = Plant
+- 10 = Water
+- 11 = Harvest
 
-1. Add your Verilog files to the `src` folder.
-2. Edit the [info.yaml](info.yaml) and update information about your project, paying special attention to the `source_files` and `top_module` properties. If you are upgrading an existing Tiny Tapeout project, check out our [online info.yaml migration tool](https://tinytapeout.github.io/tt-yaml-upgrade-tool/).
-3. Edit [docs/info.md](docs/info.md) and add a description of your project.
-4. Adapt the testbench to your design. See [test/README.md](test/README.md) for more information.
+Field select (ui[3:2])
+- Selects one of the four farm fields
 
-The GitHub action will automatically build the ASIC files using [LibreLane](https://www.zerotoasiccourse.com/terminology/librelane/).
+Crop select (ui[5:4])
+- 00 = Wheat
+- 01 = Corn
+- 10 = Carrot
+- 11 = Tomato
 
-## Enable GitHub actions to build the results page
+ui[6] = Action button
+- Performs the selected action (plant, water, or harvest)
 
-- [Enabling GitHub Pages](https://tinytapeout.com/faq/#my-github-action-is-failing-on-the-pages-part)
+ui[7] = Fulfill button
+- Attempts to fulfill the current order using inventory
 
-## Resources
+Gameplay flow:
+1. Select a field and enter Plant mode
+2. Choose a crop and press Action to plant it
+3. Wait for the crop to grow (or use Water mode to speed it up)
+4. When ready, use Harvest mode and press Action
+5. Press Fulfill to complete an order when you have enough crops
 
-- [FAQ](https://tinytapeout.com/faq/)
-- [Digital design lessons](https://tinytapeout.com/digital_design/)
-- [Learn how semiconductors work](https://tinytapeout.com/siliwiz/)
-- [Join the community](https://tinytapeout.com/discord)
-- [Build your design locally](https://www.tinytapeout.com/guides/local-hardening/)
+## External hardware
 
-## What next?
-
-- [Submit your design to the next shuttle](https://app.tinytapeout.com/).
-- Edit [this README](README.md) and explain your design, how it works, and how to test it.
-- Share your project on your social network of choice:
-  - LinkedIn [#tinytapeout](https://www.linkedin.com/search/results/content/?keywords=%23tinytapeout) [@TinyTapeout](https://www.linkedin.com/company/100708654/)
-  - Mastodon [#tinytapeout](https://chaos.social/tags/tinytapeout) [@matthewvenn](https://chaos.social/@matthewvenn)
-  - X (formerly Twitter) [#tinytapeout](https://twitter.com/hashtag/tinytapeout) [@tinytapeout](https://twitter.com/tinytapeout)
-  - Bluesky [@tinytapeout.com](https://bsky.app/profile/tinytapeout.com)
+This project uses a Tiny VGA PMOD (RGB222 interface) to display the game output. The VGA signals are mapped to the output pins and can be connected directly to the Tiny VGA PMOD for visualization on a monitor.
